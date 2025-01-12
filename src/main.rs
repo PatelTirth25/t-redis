@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
+use chrono::{Duration, Utc};
 use config::Config;
 use helper_func::{extract_command, unpack_bulk_str};
 use resp::RespHandler;
-use storage::Storage;
+use storage::{Item, Storage, StorageType};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::Mutex,
@@ -11,6 +12,7 @@ use tokio::{
 use values::Value;
 mod config;
 mod helper_func;
+mod rdb_encoding;
 mod resp;
 mod storage;
 mod values;
@@ -19,7 +21,7 @@ mod values;
 async fn main() {
     let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
     let storage: Arc<Mutex<Storage>> = Arc::new(Mutex::new(Storage::new()));
-    let config: Arc<Mutex<Config>> = Arc::new(Mutex::new(Config::new("/tmp/", "rdb.db")));
+    let config: Arc<Mutex<Config>> = Arc::new(Mutex::new(Config::new("./", "redis.rdb")));
 
     println!("Server Running at 127.0.0.1:6379");
 
@@ -57,9 +59,8 @@ async fn handle_msg(stream: TcpStream, storage: Arc<Mutex<Storage>>, config: Arc
                 "set" => {
                     if args.len() <= 2 {
                         storage.set(
+                            StorageType::Inf(unpack_bulk_str(args[1].clone()).unwrap()),
                             args[0].clone(),
-                            args[1].clone(),
-                            Value::BulkString("0".to_string()),
                         )
                     } else {
                         match unpack_bulk_str(args[2].clone())
@@ -68,7 +69,20 @@ async fn handle_msg(stream: TcpStream, storage: Arc<Mutex<Storage>>, config: Arc
                             .to_lowercase()
                             .as_str()
                         {
-                            "px" => storage.set(args[0].clone(), args[1].clone(), args[3].clone()),
+                            "px" => storage.set(
+                                StorageType::Exp(Item {
+                                    value: unpack_bulk_str(args[1].clone()).unwrap(),
+                                    expires: (Utc::now()
+                                        + Duration::milliseconds(
+                                            unpack_bulk_str(args[3].clone())
+                                                .unwrap()
+                                                .parse()
+                                                .unwrap(),
+                                        ))
+                                    .to_string(),
+                                }),
+                                args[0].clone(),
+                            ),
                             _ => {
                                 eprintln!("Unsupported tag for set");
                                 Value::Null
@@ -93,6 +107,14 @@ async fn handle_msg(stream: TcpStream, storage: Arc<Mutex<Storage>>, config: Arc
                         }
                     }
                 }
+                "keys" => {
+                    if args.len() < 1 {
+                        Value::Null
+                    } else {
+                        storage.keys(args[0].clone())
+                    }
+                }
+                "save" => config.save(&storage).await,
                 _ => Value::Null,
             }
         } else {

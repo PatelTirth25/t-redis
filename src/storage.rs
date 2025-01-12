@@ -1,15 +1,22 @@
-use std::{collections::HashMap, time::Instant};
+use std::collections::HashMap;
+
+use chrono::Utc;
+use regex::Regex;
 
 use crate::{helper_func::unpack_bulk_str, values::Value};
 
-struct Item {
+pub struct Item {
     pub value: String,
-    pub created: Instant,
-    pub expires: usize,
+    pub expires: String,
 }
 
 pub struct Storage {
-    storage: HashMap<String, Item>,
+    pub storage: HashMap<String, StorageType>,
+}
+
+pub enum StorageType {
+    Exp(Item),
+    Inf(String),
 }
 
 impl Storage {
@@ -18,33 +25,69 @@ impl Storage {
             storage: HashMap::new(),
         }
     }
-    pub fn set(&mut self, key: Value, value: Value, expires: Value) -> Value {
+    pub fn set(&mut self, data: StorageType, key: Value) -> Value {
         let key = unpack_bulk_str(key).unwrap();
-        let value = unpack_bulk_str(value).unwrap();
-        let expires = unpack_bulk_str(expires).unwrap().parse::<usize>().unwrap();
-        self.storage.insert(
-            key,
-            Item {
-                value,
-                created: Instant::now(),
-                expires,
-            },
-        );
-        Value::SimpleString("OK".to_string())
+        match data {
+            StorageType::Exp(_) => {
+                self.storage.insert(key, data);
+                return Value::SimpleString("OK".to_string());
+            }
+            StorageType::Inf(_) => {
+                self.storage.insert(key, data);
+                return Value::SimpleString("OK".to_string());
+            }
+        }
     }
 
     pub fn get(&mut self, key: Value) -> Value {
         let key = unpack_bulk_str(key).unwrap();
         let value = self.storage.get(&key);
         match value {
-            Some(v) => {
-                if v.expires > 0 && v.created.elapsed().as_millis() > v.expires as u128 {
-                    self.storage.remove(&key);
-                    return Value::Null;
+            Some(v) => match v {
+                StorageType::Exp(v) => {
+                    if Utc::now().to_string() > v.expires {
+                        self.storage.remove(&key);
+                        return Value::Null;
+                    }
+                    return Value::BulkString(v.value.to_string());
                 }
-                return Value::BulkString(v.value.to_string());
-            }
+                StorageType::Inf(v) => {
+                    return Value::BulkString(v.to_string());
+                }
+            },
             None => Value::Null,
+        }
+    }
+
+    pub fn keys(&self, pattern: Value) -> Value {
+        let pattern = unpack_bulk_str(pattern).unwrap();
+        let regex = Regex::new(&pattern);
+
+        match regex {
+            Ok(r) => {
+                let mut keys = Vec::new();
+                for key in self.storage.keys() {
+                    match self.storage.get(key) {
+                        Some(v) => match v {
+                            StorageType::Exp(v) => {
+                                if Utc::now().to_string() > v.expires {
+                                    continue;
+                                } else if r.is_match(key) {
+                                    keys.push(Value::BulkString(key.to_string()));
+                                }
+                            }
+                            StorageType::Inf(_) => {
+                                if r.is_match(key) {
+                                    keys.push(Value::BulkString(key.to_string()));
+                                }
+                            }
+                        },
+                        None => {}
+                    }
+                }
+                Value::Array(keys)
+            }
+            Err(_) => Value::Null,
         }
     }
 }
