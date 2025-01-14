@@ -1,12 +1,13 @@
 pub trait RdbEncoding {
     fn serialize(&self) -> String;
+    fn deserialize(&self) -> String;
 }
 
-pub struct RdbSize(String);
+pub struct RdbSize(i128);
 pub struct RdbString(String);
 
 impl RdbSize {
-    pub fn new(v: String) -> Self {
+    pub fn new(v: i128) -> Self {
         Self(v)
     }
 }
@@ -19,28 +20,19 @@ impl RdbString {
 
 impl RdbEncoding for RdbSize {
     fn serialize(&self) -> String {
-        let mut v: Vec<u8> = Vec::new();
-        v.push(self.0.len() as u8);
-
-        let formatted = v
-            .iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>()
-            .join(" ");
-        formatted
+        self.0.to_string() + "\n"
+    }
+    fn deserialize(&self) -> String {
+        self.0.to_string()
     }
 }
 
 impl RdbEncoding for RdbString {
     fn serialize(&self) -> String {
-        let mut v: Vec<u8> = Vec::new();
-        v.push(self.0.len() as u8);
-        v.extend_from_slice(self.0.as_bytes());
-        let formatted = v
-            .iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>()
-            .join(" ");
-        formatted
+        let l = self.0.to_string().len();
+        l.to_string() + "\r" + &self.0.to_string() + "\n"
+    }
+    fn deserialize(&self) -> String {
+        self.0.to_string().split_once("\r").unwrap().1.to_string()
     }
 }

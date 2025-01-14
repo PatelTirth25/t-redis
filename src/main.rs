@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use chrono::{Duration, Utc};
 use config::Config;
-use helper_func::{extract_command, unpack_bulk_str};
+use helper_func::{extract_command, load_rdb, unpack_bulk_str};
 use resp::RespHandler;
 use storage::{Item, Storage, StorageType};
 use tokio::{
@@ -22,6 +22,15 @@ async fn main() {
     let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
     let storage: Arc<Mutex<Storage>> = Arc::new(Mutex::new(Storage::new()));
     let config: Arc<Mutex<Config>> = Arc::new(Mutex::new(Config::new("./", "redis.rdb")));
+
+    {
+        let storage = Arc::clone(&storage);
+        let mut storage = storage.lock().await;
+        match load_rdb(&mut storage, "./", "redis.rdb").await {
+            Ok(()) => println!("RDB loaded"),
+            Err(e) => println!("Error loading RDB: {}", e),
+        };
+    }
 
     println!("Server Running at 127.0.0.1:6379");
 
