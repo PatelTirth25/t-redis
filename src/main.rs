@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use chrono::{Duration, Utc};
 use config::Config;
@@ -28,7 +28,10 @@ async fn main() {
         let mut storage = storage.lock().await;
         match load_rdb(&mut storage, "./", "redis.rdb").await {
             Ok(()) => println!("RDB loaded"),
-            Err(e) => println!("Error loading RDB: {}", e),
+            Err(e) => {
+                eprintln!("Error loading RDB: {}", e);
+                storage.storage = HashMap::new();
+            }
         };
     }
 

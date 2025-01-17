@@ -91,10 +91,10 @@ pub async fn load_rdb(
     println!("{:#?}", buf);
 
     println!("Redis RDB file headers and metadata...");
-    println!("{}", RdbString::new(buf[0].to_string()).deserialize());
+    println!("{}", RdbString::new(buf[0].to_string()).deserialize()?);
     println!("{}", buf[1]);
-    println!("{}", RdbString::new(buf[2].to_string()).deserialize());
-    println!("{}", RdbString::new(buf[3].to_string()).deserialize());
+    println!("{}", RdbString::new(buf[2].to_string()).deserialize()?);
+    println!("{}", RdbString::new(buf[3].to_string()).deserialize()?);
 
     let mut i = 4;
     while i < buf.len() {
@@ -102,7 +102,7 @@ pub async fn load_rdb(
             i += 1;
             println!(
                 "DB index: {}",
-                RdbSize::new(buf[i].parse::<i128>().unwrap()).deserialize()
+                RdbSize::new(buf[i].parse::<i128>().unwrap()).deserialize()?
             );
             i += 1;
             println!("{}", buf[i]);
@@ -128,10 +128,10 @@ pub async fn load_rdb(
                     );
                     let _ = storage.set(
                         StorageType::Exp(Item {
-                            value: RdbString::new(buf[i + 3].to_string()).deserialize(),
-                            expires: RdbString::new(buf[i].to_string()).deserialize(),
+                            value: RdbString::new(buf[i + 3].to_string()).deserialize()?,
+                            expires: RdbString::new(buf[i].to_string()).deserialize()?,
                         }),
-                        Value::BulkString(RdbString::new(buf[i + 2].to_string()).deserialize()),
+                        Value::BulkString(RdbString::new(buf[i + 2].to_string()).deserialize()?),
                     );
                     i += 4;
                     cnt -= 1;
@@ -140,8 +140,8 @@ pub async fn load_rdb(
                     println!("Key: {:#?}, Value: {:#?}", buf[i], buf[i + 1]);
 
                     let _ = storage.set(
-                        StorageType::Inf(RdbString::new(buf[i + 1].to_string()).deserialize()),
-                        Value::BulkString(RdbString::new(buf[i].to_string()).deserialize()),
+                        StorageType::Inf(RdbString::new(buf[i + 1].to_string()).deserialize()?),
+                        Value::BulkString(RdbString::new(buf[i].to_string()).deserialize()?),
                     );
                     i += 2;
                     cnt -= 1;
